@@ -2,6 +2,8 @@ import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { Button } from "primereact/button";
+import React from "react";
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
@@ -43,7 +45,23 @@ function App() {
         />
         <button type="submit">Greet</button>
       </form>
-      <p>{greetMsg}</p>
+          <p>{greetMsg}</p>
+      <div style={{ padding: "2rem" }}>
+      <h1>FileFlow</h1>
+
+      <Button
+        label="Select Folder"
+        icon="pi pi-folder-open"
+      />
+          </div>
+          <div style={{ padding: "2rem" }}>
+              <h1>FileFlow</h1>
+
+              <Button
+                  label="Select Folder"
+                  icon="pi pi-folder-open"
+              />
+          </div>
     </main>
   );
 }
