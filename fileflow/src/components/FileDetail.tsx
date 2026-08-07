@@ -1,6 +1,6 @@
 import * as React from "react";
 import {FileRecord} from "../types/file";
-import { Panel } from "primereact/panel";
+
 
 export default function FileDetail({ file }: { file: FileRecord }) {
     return (

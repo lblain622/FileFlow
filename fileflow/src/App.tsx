@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useState } from "react";
-import { Button } from "primereact/button";
+import { Button } from "@/components/ui/button";
 
 function App() {
   
