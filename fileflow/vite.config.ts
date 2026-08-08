@@ -9,7 +9,11 @@ export default defineConfig(async () => ({
     plugins: [react(),tailwindcss()],
 
     // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
-    //
+    resolve: {
+        alias: {
+            "@": path.resolve(__dirname, "./src"),
+        },
+    },
     // 1. prevent Vite from obscuring rust errors
     clearScreen: false,
     // 2. tauri expects a fixed port, fail if that port is not available
