@@ -7,6 +7,7 @@ export interface FileRecord {
   size?: string;
   modifiedAt: string;
   owner: string;
+  path?: string;
   children?: FileRecord[];
 }
 
