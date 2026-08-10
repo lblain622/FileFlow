@@ -16,6 +16,7 @@ fn system_status() -> String {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+<<<<<<< HEAD
         .invoke_handler(tauri::generate_handler![
             greet,
             system_status,
@@ -28,6 +29,10 @@ pub fn run() {
             commands::files::create_directory,
             commands::files::delete_entry
         ])
+=======
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![greet, system_status])
+>>>>>>> e94342f83e9e7203fd2413378f9e417194a785f5
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
