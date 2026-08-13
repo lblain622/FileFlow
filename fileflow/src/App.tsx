@@ -63,6 +63,7 @@ import SearchBar from "@/components/SearchBar";
 import Sidebar, { type QuickView } from "@/components/Sidebar";
 import StatusBar from "@/components/StatusBar";
 import AppearanceSettings from "@/features/settings/AppearanceSettings";
+import AutomationPage from "@/features/automation/AutomationPage";
 import {
   applyTheme,
   getStoredTheme,
@@ -161,7 +162,7 @@ export default function App() {
   const [pendingDelete, setPendingDelete] = useState<FileRecord>();
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("list");
-  const [page, setPage] = useState<"files" | "settings">("files");
+  const [page, setPage] = useState<"files" | "automation" | "settings">("files");
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
   const [backendStatus, setBackendStatus] = useState<string>();
   const [backendError, setBackendError] = useState<string>();
@@ -403,6 +404,8 @@ export default function App() {
           <div className="min-h-0 flex-1 overflow-y-auto bg-background p-6 lg:p-8">
             <AppearanceSettings theme={theme} onThemeChange={setTheme} />
           </div>
+        ) : page === "automation" ? (
+          <AutomationPage />
         ) : (
           <>
             <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b bg-background px-6">

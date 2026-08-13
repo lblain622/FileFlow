@@ -27,3 +27,31 @@ export const listDirectory = (root: string, path: string) => invoke<DirectoryEnt
 export const createFile = (root: string, directory: string, name: string) => invoke<void>("create_file", { root, directory, name });
 export const createDirectory = (root: string, directory: string, name: string) => invoke<void>("create_directory", { root, directory, name });
 export const deleteEntry = (root: string, path: string) => invoke<void>("delete_entry", { root, path });
+
+export type RuleMatchType = "extension" | "nameContains";
+export interface AutomationRule {
+  id: string;
+  name: string;
+  matchType: RuleMatchType;
+  matchValue: string;
+  destination: string;
+  enabled: boolean;
+}
+export interface MoveHistoryEntry {
+  id: string;
+  ruleName: string;
+  source: string;
+  destination: string;
+  movedAtMs: number;
+  undoneAtMs?: number;
+}
+export interface AutomationState {
+  downloadsPath: string;
+  rules: AutomationRule[];
+  history: MoveHistoryEntry[];
+}
+export interface ScanResult { moved: number; errors: string[]; }
+export const getAutomationState = () => invoke<AutomationState>("get_automation_state");
+export const saveAutomationRules = (rules: AutomationRule[]) => invoke<void>("save_automation_rules", { rules });
+export const scanDownloads = () => invoke<ScanResult>("scan_downloads");
+export const undoAutomatedMove = (historyId: string) => invoke<void>("undo_automated_move", { historyId });

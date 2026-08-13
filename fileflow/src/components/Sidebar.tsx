@@ -1,5 +1,6 @@
 import {
   Clock3,
+  FolderCog,
   Download,
   FileText,
   FolderOpen,
@@ -28,13 +29,13 @@ type Props = {
   activePath?: string;
   activeRoot?: string;
   quickView: QuickView;
-  page: "files" | "settings";
+  page: "files" | "automation" | "settings";
   onOpenDisk: (path: string) => void;
   onOpenLocation: (location: SystemLocation) => void;
   onQuickView: (view: QuickView) => void;
   onOpenRecycleBin: () => void;
   onChooseFolder: () => void;
-  onPageChange: (page: "files" | "settings") => void;
+  onPageChange: (page: "files" | "automation" | "settings") => void;
 };
 const locationIcons: Record<SystemLocationKind, typeof Home> = {
   home: Home,
@@ -149,6 +150,14 @@ export default function Sidebar({
         className="flex flex-col gap-1 px-3 pb-3"
         aria-label="Other locations"
       >
+        <Button
+          variant={page === "automation" ? "secondary" : "ghost"}
+          className="justify-start"
+          onClick={() => onPageChange("automation")}
+        >
+          <FolderCog data-icon="inline-start" />
+          Automation
+        </Button>
         <Button
           variant="ghost"
           className="justify-start"

@@ -20,6 +20,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             system_status,
+            commands::automation::get_automation_state,
+            commands::automation::save_automation_rules,
+            commands::automation::scan_downloads,
+            commands::automation::undo_automated_move,
             commands::files::hello_from_rust,
             commands::files::list_disk_roots,
             commands::files::list_system_locations,
