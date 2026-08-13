@@ -51,7 +51,10 @@ export interface AutomationState {
   history: MoveHistoryEntry[];
 }
 export interface ScanResult { moved: number; errors: string[]; }
+export interface ProposedMove { source: string; destination: string; ruleName: string; }
+export interface PreviewResult { moves: ProposedMove[]; errors: string[]; }
 export const getAutomationState = () => invoke<AutomationState>("get_automation_state");
 export const saveAutomationRules = (rules: AutomationRule[]) => invoke<void>("save_automation_rules", { rules });
 export const scanDownloads = () => invoke<ScanResult>("scan_downloads");
+export const previewDownloads = () => invoke<PreviewResult>("preview_downloads");
 export const undoAutomatedMove = (historyId: string) => invoke<void>("undo_automated_move", { historyId });

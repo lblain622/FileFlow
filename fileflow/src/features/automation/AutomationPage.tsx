@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open as openFolderDialog } from "@tauri-apps/plugin-dialog";
-import { Activity, FolderInput, Plus, Trash2, Undo2 } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Eye, FolderInput, GripVertical, Plus, Trash2, Undo2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   getAutomationState,
+  previewDownloads,
   saveAutomationRules,
   scanDownloads,
   undoAutomatedMove,
   type AutomationRule,
   type AutomationState,
+  type PreviewResult,
   type RuleMatchType,
 } from "@/lib/backend";
 
@@ -35,6 +37,10 @@ export default function AutomationPage() {
   const [matchValue, setMatchValue] = useState("");
   const [destination, setDestination] = useState("");
   const [saving, setSaving] = useState(false);
+  const [draggedRuleId, setDraggedRuleId] = useState<string>();
+  const [preview, setPreview] = useState<PreviewResult>();
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const scanInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -108,6 +114,37 @@ export default function AutomationPage() {
       .catch((saveError: unknown) => setError(String(saveError)));
   };
 
+  const reorderRule = (sourceId: string, targetId: string) => {
+    if (!state || sourceId === targetId) return;
+    const rules = [...state.rules];
+    const sourceIndex = rules.findIndex((rule) => rule.id === sourceId);
+    const targetIndex = rules.findIndex((rule) => rule.id === targetId);
+    if (sourceIndex < 0 || targetIndex < 0) return;
+    const [movedRule] = rules.splice(sourceIndex, 1);
+    rules.splice(targetIndex, 0, movedRule);
+    void persistRules(rules).catch((saveError: unknown) => setError(String(saveError)));
+  };
+
+  const moveRule = (id: string, offset: -1 | 1) => {
+    if (!state) return;
+    const index = state.rules.findIndex((rule) => rule.id === id);
+    const target = state.rules[index + offset];
+    if (target) reorderRule(id, target.id);
+  };
+
+  const showPreview = async () => {
+    setPreviewing(true);
+    setError(undefined);
+    try {
+      setPreview(await previewDownloads());
+      setPreviewOpen(true);
+    } catch (previewError) {
+      setError(String(previewError));
+    } finally {
+      setPreviewing(false);
+    }
+  };
+
   const undoMove = async (id: string) => {
     try {
       await undoAutomatedMove(id);
@@ -125,7 +162,10 @@ export default function AutomationPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Downloads automation</h1>
           <p className="text-sm text-muted-foreground">Watching {state?.downloadsPath ?? "your Downloads folder"} every five seconds.</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}><Plus data-icon="inline-start" />New rule</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={previewing} onClick={() => void showPreview()}><Eye data-icon="inline-start" />Dry run</Button>
+          <Button onClick={() => setDialogOpen(true)}><Plus data-icon="inline-start" />New rule</Button>
+        </div>
       </div>
       {error ? <Alert variant="destructive"><AlertTitle>Automation needs attention</AlertTitle><AlertDescription>{error}</AlertDescription></Alert> : null}
       {notice ? <Alert><Activity /><AlertTitle>Automation update</AlertTitle><AlertDescription>{notice}</AlertDescription></Alert> : null}
@@ -133,18 +173,31 @@ export default function AutomationPage() {
       <Card>
         <CardHeader>
           <CardTitle>Rules</CardTitle>
-          <CardDescription>The first enabled rule that matches a settled file moves it to its destination.</CardDescription>
+          <CardDescription>Drag rules to set priority. The first enabled rule that matches a settled file wins.</CardDescription>
           <CardAction><Badge variant="secondary">{state?.rules.filter((rule) => rule.enabled).length ?? 0} active</Badge></CardAction>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {state?.rules.length ? state.rules.map((rule) => (
-            <div key={rule.id} className="flex items-center gap-4 rounded-lg border p-4">
+          {state?.rules.length ? state.rules.map((rule, index) => (
+            <div
+              key={rule.id}
+              draggable
+              onDragStart={(event) => { setDraggedRuleId(rule.id); event.dataTransfer.effectAllowed = "move"; }}
+              onDragEnd={() => setDraggedRuleId(undefined)}
+              onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }}
+              onDrop={(event) => { event.preventDefault(); if (draggedRuleId) reorderRule(draggedRuleId, rule.id); setDraggedRuleId(undefined); }}
+              className="flex items-center gap-3 rounded-lg border p-4"
+            >
+              <GripVertical className="cursor-grab text-muted-foreground" aria-hidden="true" />
               <Switch checked={rule.enabled} onCheckedChange={(enabled) => updateRule(rule.id, { enabled })} aria-label={`${rule.enabled ? "Disable" : "Enable"} ${rule.name}`} />
               <div className="min-w-0 flex-1">
                 <p className="font-medium">{rule.name}</p>
                 <p className="truncate text-sm text-muted-foreground">{rule.matchType === "extension" ? `Extension is .${rule.matchValue.replace(/^\./, "")}` : `Name contains “${rule.matchValue}”`} → {rule.destination}</p>
               </div>
-              <Button variant="ghost" size="icon" aria-label={`Delete ${rule.name}`} onClick={() => removeRule(rule.id)}><Trash2 /></Button>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon-sm" disabled={index === 0} aria-label={`Move ${rule.name} up`} onClick={() => moveRule(rule.id, -1)}><ArrowUp /></Button>
+                <Button variant="ghost" size="icon-sm" disabled={index === state.rules.length - 1} aria-label={`Move ${rule.name} down`} onClick={() => moveRule(rule.id, 1)}><ArrowDown /></Button>
+                <Button variant="ghost" size="icon-sm" aria-label={`Delete ${rule.name}`} onClick={() => removeRule(rule.id)}><Trash2 /></Button>
+              </div>
             </div>
           )) : <Empty><EmptyHeader><EmptyTitle>No rules yet</EmptyTitle><EmptyDescription>Add a rule to begin organizing new downloads automatically.</EmptyDescription></EmptyHeader></Empty>}
         </CardContent>
@@ -190,6 +243,20 @@ export default function AutomationPage() {
             </Field>
           </FieldGroup>
           <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button disabled={saving || !name.trim() || !matchValue.trim() || !destination} onClick={() => void addRule()}>Create rule</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader><DialogTitle>Dry-run preview</DialogTitle><DialogDescription>No files were moved. This is what the current ordered rules would do to settled downloads.</DialogDescription></DialogHeader>
+          {preview?.errors.length ? <Alert variant="destructive"><AlertTitle>Skipped files</AlertTitle><AlertDescription>{preview.errors.join(" ")}</AlertDescription></Alert> : null}
+          {preview?.moves.length ? (
+            <Table>
+              <TableHeader><TableRow><TableHead>File</TableHead><TableHead>Rule</TableHead><TableHead>Destination</TableHead></TableRow></TableHeader>
+              <TableBody>{preview.moves.map((move) => <TableRow key={move.source}><TableCell>{fileName(move.source)}</TableCell><TableCell>{move.ruleName}</TableCell><TableCell className="max-w-72 truncate" title={move.destination}>{move.destination}</TableCell></TableRow>)}</TableBody>
+            </Table>
+          ) : <Empty><EmptyHeader><EmptyTitle>No files would move</EmptyTitle><EmptyDescription>No settled Downloads files currently match an enabled rule.</EmptyDescription></EmptyHeader></Empty>}
+          <DialogFooter><Button onClick={() => setPreviewOpen(false)}>Done</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

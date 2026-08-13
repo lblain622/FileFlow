@@ -59,8 +59,8 @@ export function FileCard({
         }
       >
         <CardHeader>
-          <div className="mb-5 flex size-11 items-center justify-center rounded-lg bg-muted">
-            <FileIcon kind={file.kind} />
+          <div className="mb-5 flex size-11 items-center justify-center overflow-hidden rounded-lg bg-muted">
+            <FileIcon kind={file.kind} path={file.path} large />
           </div>
           <CardTitle className="truncate">{file.name}</CardTitle>
           <CardDescription>

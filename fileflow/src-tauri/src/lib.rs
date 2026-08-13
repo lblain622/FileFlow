@@ -23,6 +23,7 @@ pub fn run() {
             commands::automation::get_automation_state,
             commands::automation::save_automation_rules,
             commands::automation::scan_downloads,
+            commands::automation::preview_downloads,
             commands::automation::undo_automated_move,
             commands::files::hello_from_rust,
             commands::files::list_disk_roots,

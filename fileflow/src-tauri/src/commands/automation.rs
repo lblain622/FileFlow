@@ -53,6 +53,21 @@ pub struct ScanResult {
     errors: Vec<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProposedMove {
+    source: String,
+    destination: String,
+    rule_name: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PreviewResult {
+    moves: Vec<ProposedMove>,
+    errors: Vec<String>,
+}
+
 fn now_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -132,6 +147,60 @@ fn is_settled(path: &Path) -> bool {
         .is_some_and(|age| age.as_millis() >= SETTLE_TIME_MS)
 }
 
+fn plan_downloads(
+    downloads: &Path,
+    rules: &[AutomationRule],
+    require_settled: bool,
+) -> Result<PreviewResult, String> {
+    let downloads_canonical = fs::canonicalize(downloads)
+        .map_err(|error| format!("Could not access Downloads: {error}"))?;
+    let entries =
+        fs::read_dir(downloads).map_err(|error| format!("Could not monitor Downloads: {error}"))?;
+    let mut moves = Vec::new();
+    let mut errors = Vec::new();
+
+    for entry in entries.filter_map(Result::ok) {
+        let source = entry.path();
+        if !source.is_file() || (require_settled && !is_settled(&source)) {
+            continue;
+        }
+        let Some(rule) = rules
+            .iter()
+            .find(|rule| rule.enabled && matches_rule(&source, rule))
+        else {
+            continue;
+        };
+        let destination_directory = match fs::canonicalize(&rule.destination) {
+            Ok(path) if path.is_dir() => path,
+            _ => {
+                errors.push(format!("{}: destination is unavailable", rule.name));
+                continue;
+            }
+        };
+        if destination_directory == downloads_canonical {
+            continue;
+        }
+        let Some(file_name) = source.file_name() else {
+            continue;
+        };
+        let destination = destination_directory.join(file_name);
+        if destination.exists() {
+            errors.push(format!(
+                "{} already exists in {}",
+                file_name.to_string_lossy(),
+                rule.destination
+            ));
+            continue;
+        }
+        moves.push(ProposedMove {
+            source: source.to_string_lossy().into_owned(),
+            destination: destination.to_string_lossy().into_owned(),
+            rule_name: rule.name.clone(),
+        });
+    }
+    Ok(PreviewResult { moves, errors })
+}
+
 #[tauri::command]
 pub fn get_automation_state(app: AppHandle) -> Result<AutomationState, String> {
     let data = load_data(&app)?;
@@ -169,47 +238,12 @@ pub fn scan_downloads(app: AppHandle) -> Result<ScanResult, String> {
     let downloads = downloads_path(&app)?;
     let mut data = load_data(&app)?;
     let mut moved = 0;
-    let mut errors = Vec::new();
-    let entries = fs::read_dir(&downloads)
-        .map_err(|error| format!("Could not monitor Downloads: {error}"))?;
+    let preview = plan_downloads(&downloads, &data.rules, true)?;
+    let mut errors = preview.errors;
 
-    for entry in entries.filter_map(Result::ok) {
-        let source = entry.path();
-        if !source.is_file() || !is_settled(&source) {
-            continue;
-        }
-        let Some(rule) = data
-            .rules
-            .iter()
-            .find(|rule| rule.enabled && matches_rule(&source, rule))
-            .cloned()
-        else {
-            continue;
-        };
-        let destination_directory = match fs::canonicalize(&rule.destination) {
-            Ok(path) if path.is_dir() => path,
-            _ => {
-                errors.push(format!("{}: destination is unavailable", rule.name));
-                continue;
-            }
-        };
-        if destination_directory
-            == fs::canonicalize(&downloads).unwrap_or_else(|_| downloads.clone())
-        {
-            continue;
-        }
-        let Some(file_name) = source.file_name() else {
-            continue;
-        };
-        let destination = destination_directory.join(file_name);
-        if destination.exists() {
-            errors.push(format!(
-                "{} already exists in {}",
-                file_name.to_string_lossy(),
-                rule.destination
-            ));
-            continue;
-        }
+    for planned in preview.moves {
+        let source = PathBuf::from(&planned.source);
+        let destination = PathBuf::from(&planned.destination);
         match fs::rename(&source, &destination) {
             Ok(()) => {
                 let timestamp = now_ms();
@@ -217,7 +251,7 @@ pub fn scan_downloads(app: AppHandle) -> Result<ScanResult, String> {
                     0,
                     MoveHistoryEntry {
                         id: format!("{timestamp}-{}", data.history.len()),
-                        rule_name: rule.name,
+                        rule_name: planned.rule_name,
                         source: source.to_string_lossy().into_owned(),
                         destination: destination.to_string_lossy().into_owned(),
                         moved_at_ms: timestamp,
@@ -226,10 +260,7 @@ pub fn scan_downloads(app: AppHandle) -> Result<ScanResult, String> {
                 );
                 moved += 1;
             }
-            Err(error) => errors.push(format!(
-                "Could not move {}: {error}",
-                file_name.to_string_lossy()
-            )),
+            Err(error) => errors.push(format!("Could not move {}: {error}", source.display())),
         }
     }
     data.history.truncate(500);
@@ -238,13 +269,12 @@ pub fn scan_downloads(app: AppHandle) -> Result<ScanResult, String> {
 }
 
 #[tauri::command]
-pub fn undo_automated_move(app: AppHandle, history_id: String) -> Result<(), String> {
-    let mut data = load_data(&app)?;
-    let entry = data
-        .history
-        .iter_mut()
-        .find(|entry| entry.id == history_id)
-        .ok_or("History entry was not found")?;
+pub fn preview_downloads(app: AppHandle) -> Result<PreviewResult, String> {
+    let data = load_data(&app)?;
+    plan_downloads(&downloads_path(&app)?, &data.rules, true)
+}
+
+fn undo_move(entry: &mut MoveHistoryEntry) -> Result<(), String> {
     if entry.undone_at_ms.is_some() {
         return Err("This move has already been undone".into());
     }
@@ -258,5 +288,132 @@ pub fn undo_automated_move(app: AppHandle, history_id: String) -> Result<(), Str
     }
     fs::rename(destination, source).map_err(|error| format!("Could not undo move: {error}"))?;
     entry.undone_at_ms = Some(now_ms());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn undo_automated_move(app: AppHandle, history_id: String) -> Result<(), String> {
+    let mut data = load_data(&app)?;
+    let entry = data
+        .history
+        .iter_mut()
+        .find(|entry| entry.id == history_id)
+        .ok_or("History entry was not found")?;
+    undo_move(entry)?;
     save_data(&app, &data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{matches_rule, plan_downloads, undo_move, AutomationRule, MoveHistoryEntry};
+    use std::{
+        fs,
+        path::Path,
+        process,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    fn fixture() -> std::path::PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("fileflow-automation-{}-{nonce}", process::id()));
+        fs::create_dir(&path).expect("fixture should be created");
+        path
+    }
+
+    fn rule(name: &str, match_type: &str, value: &str, destination: &Path) -> AutomationRule {
+        AutomationRule {
+            id: name.into(),
+            name: name.into(),
+            match_type: match_type.into(),
+            match_value: value.into(),
+            destination: destination.to_string_lossy().into_owned(),
+            enabled: true,
+        }
+    }
+
+    #[test]
+    fn matches_extensions_and_names_case_insensitively() {
+        assert!(matches_rule(
+            Path::new("Quarterly-INVOICE.PDF"),
+            &rule("PDF", "extension", ".pdf", Path::new("."))
+        ));
+        assert!(matches_rule(
+            Path::new("Quarterly-INVOICE.PDF"),
+            &rule("Invoice", "nameContains", "invoice", Path::new("."))
+        ));
+    }
+
+    #[test]
+    fn preview_uses_first_matching_rule_without_moving_file() {
+        let root = fixture();
+        let downloads = root.join("downloads");
+        let first = root.join("first");
+        let second = root.join("second");
+        for path in [&downloads, &first, &second] {
+            fs::create_dir(path).unwrap();
+        }
+        let source = downloads.join("invoice.pdf");
+        fs::write(&source, "content").unwrap();
+        let rules = [
+            rule("Invoices", "nameContains", "invoice", &first),
+            rule("PDFs", "extension", "pdf", &second),
+        ];
+
+        let preview = plan_downloads(&downloads, &rules, false).unwrap();
+        assert_eq!(preview.moves.len(), 1);
+        assert_eq!(preview.moves[0].rule_name, "Invoices");
+        assert_eq!(
+            Path::new(&preview.moves[0].destination),
+            fs::canonicalize(&first).unwrap().join("invoice.pdf")
+        );
+        assert!(source.is_file(), "dry-run must not move the source");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn preview_reports_destination_collisions() {
+        let root = fixture();
+        let downloads = root.join("downloads");
+        let destination = root.join("destination");
+        fs::create_dir(&downloads).unwrap();
+        fs::create_dir(&destination).unwrap();
+        fs::write(downloads.join("report.pdf"), "new").unwrap();
+        fs::write(destination.join("report.pdf"), "existing").unwrap();
+
+        let preview = plan_downloads(
+            &downloads,
+            &[rule("PDFs", "extension", "pdf", &destination)],
+            false,
+        )
+        .unwrap();
+        assert!(preview.moves.is_empty());
+        assert_eq!(preview.errors.len(), 1);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn undo_restores_a_move_and_rejects_a_second_undo() {
+        let root = fixture();
+        let source = root.join("downloads.txt");
+        let destination = root.join("organized.txt");
+        fs::write(&destination, "content").unwrap();
+        let mut entry = MoveHistoryEntry {
+            id: "move-1".into(),
+            rule_name: "Text".into(),
+            source: source.to_string_lossy().into_owned(),
+            destination: destination.to_string_lossy().into_owned(),
+            moved_at_ms: 1,
+            undone_at_ms: None,
+        };
+
+        undo_move(&mut entry).unwrap();
+        assert!(source.is_file());
+        assert!(entry.undone_at_ms.is_some());
+        assert!(undo_move(&mut entry).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
 }

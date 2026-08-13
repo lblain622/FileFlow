@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import { Archive, FileText, Folder, Image, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -38,7 +40,19 @@ type Props = {
   onFavorite: (file: FileRecord) => void;
   isFavorite: (file: FileRecord) => boolean;
 };
-export function FileIcon({ kind }: Readonly<{ kind: FileKind }>) {
+export function FileIcon({ kind, path, large = false }: Readonly<{ kind: FileKind; path?: string; large?: boolean }>) {
+  const [failedPath, setFailedPath] = useState<string>();
+  if (kind === "image" && path && failedPath !== path) {
+    return (
+      <img
+        src={convertFileSrc(path)}
+        alt=""
+        className={large ? "size-11 rounded-lg object-cover" : "size-6 rounded object-cover"}
+        loading="lazy"
+        onError={() => setFailedPath(path)}
+      />
+    );
+  }
   const Icon = icons[kind];
   return <Icon className="text-muted-foreground" aria-hidden="true" />;
 }
@@ -92,7 +106,7 @@ export default function FileTable({
                       onOpen(file);
                     }}
                   >
-                    <FileIcon kind={file.kind} />
+                    <FileIcon kind={file.kind} path={file.path} />
                     <span className="truncate">{file.name}</span>
                   </button>
                 </TableCell>
