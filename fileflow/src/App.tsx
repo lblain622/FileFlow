@@ -171,6 +171,63 @@ export default function App() {
   const [createKind, setCreateKind] = useState<CreateKind>("file");
   const [newName, setNewName] = useState("");
   const [createError, setCreateError] = useState<string>();
+
+  const openInitialExplorerView = async (
+    detectedLocations: SystemLocation[],
+    detectedDisks: DiskRoot[],
+    isActive: () => boolean,
+  ) => {
+    const preferredLocationKinds: SystemLocation["kind"][] = [
+      "home",
+      "desktop",
+      "documents",
+      "downloads",
+      "pictures",
+      "music",
+      "videos",
+    ];
+    const orderedLocations = [...detectedLocations].sort(
+      (a, b) =>
+        preferredLocationKinds.indexOf(a.kind) -
+        preferredLocationKinds.indexOf(b.kind),
+    );
+    const fallbackDisk =
+      detectedDisks.find((disk) => disk.isCurrent) ?? detectedDisks[0];
+    const candidates = [
+      ...orderedLocations.map((location) => ({
+        root: location.rootPath,
+        path: location.path,
+      })),
+      ...(fallbackDisk ? [{ root: fallbackDisk.path, path: fallbackDisk.path }] : []),
+      ...detectedDisks.map((disk) => ({ root: disk.path, path: disk.path })),
+    ].filter(
+      (candidate, index, all) =>
+        all.findIndex(
+          (item) => item.root === candidate.root && item.path === candidate.path,
+        ) === index,
+    );
+
+    for (const candidate of candidates) {
+      try {
+        const entries = await listDirectory(candidate.root, candidate.path);
+        if (!isActive()) return;
+        setFiles(entries.map((entry) => toFileRecord(entry, candidate.root)));
+        setRootPath(candidate.root);
+        setDirectoryPath(candidate.path);
+        setPage("files");
+        setQuickView("home");
+        setView("list");
+        return;
+      } catch {
+        // Try the next explorer candidate path.
+      }
+    }
+
+    if (!isActive()) return;
+    setOperationError(
+      "Couldn't open a default folder automatically. Choose a folder to start browsing.",
+    );
+  };
   const visibleFiles = useMemo(() => {
     const source =
       quickView === "recent"
@@ -209,19 +266,11 @@ export default function App() {
         setBackendStatus(`${greeting} · ${status}`);
         setDisks(detectedDisks);
         setLocations(detectedLocations);
-        const home = detectedLocations.find(
-          (location) => location.kind === "home",
+        await openInitialExplorerView(
+          detectedLocations,
+          detectedDisks,
+          () => active,
         );
-        const fallbackDisk =
-          detectedDisks.find((disk) => disk.isCurrent) ?? detectedDisks[0];
-        const initialRoot = home?.rootPath ?? fallbackDisk?.path;
-        const initialPath = home?.path ?? fallbackDisk?.path;
-        if (!initialRoot || !initialPath) return;
-        const entries = await listDirectory(initialRoot, initialPath);
-        if (!active) return;
-        setFiles(entries.map((entry) => toFileRecord(entry, initialRoot)));
-        setRootPath(initialRoot);
-        setDirectoryPath(initialPath);
       })
       .catch((error: unknown) => {
         if (active)
