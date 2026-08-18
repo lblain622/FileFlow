@@ -1,28 +1,61 @@
 import { Laptop, Moon, Sun } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import type { Theme } from "@/features/settings/theme";
 import { cn } from "@/lib/utils";
 
 const themeOptions = [
-  { value: "light", label: "Light", description: "A bright, clean workspace.", icon: Sun },
-  { value: "dark", label: "Dark", description: "Easy on the eyes in low light.", icon: Moon },
-  { value: "system", label: "System", description: "Match your device appearance.", icon: Laptop },
-] satisfies ReadonlyArray<{ value: Theme; label: string; description: string; icon: typeof Sun }>;
+  {
+    value: "light",
+    label: "Light",
+    description: "A bright, clean workspace.",
+    icon: Sun,
+  },
+  {
+    value: "dark",
+    label: "Dark",
+    description: "Easy on the eyes in low light.",
+    icon: Moon,
+  },
+  {
+    value: "system",
+    label: "System",
+    description: "Match your device appearance.",
+    icon: Laptop,
+  },
+] satisfies ReadonlyArray<{
+  value: Theme;
+  label: string;
+  description: string;
+  icon: typeof Sun;
+}>;
 
 type Props = { theme: Theme; onThemeChange: (theme: Theme) => void };
 
-export default function AppearanceSettings({ theme, onThemeChange }: Readonly<Props>) {
+export default function AppearanceSettings({
+  theme,
+  onThemeChange,
+}: Readonly<Props>) {
   return (
     <section className="mx-auto flex w-full max-w-4xl flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Personalize how FileFlow looks and feels.</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Personalize how FileFlow looks and feels.
+        </p>
       </div>
       <Card>
         <CardHeader>
           <CardTitle>Appearance</CardTitle>
-          <CardDescription>Choose the theme used throughout the app.</CardDescription>
+          <CardDescription>
+            Choose the theme used throughout the app.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ToggleGroup
@@ -44,7 +77,12 @@ export default function AppearanceSettings({ theme, onThemeChange }: Readonly<Pr
                   aria-label={`Use ${option.label.toLowerCase()} theme`}
                   className="h-auto min-h-36 flex-col items-stretch justify-between gap-4 p-4 text-left whitespace-normal"
                 >
-                  <div className={cn("flex h-16 overflow-hidden rounded-md border bg-background", option.value === "dark" && "dark bg-background")}>
+                  <div
+                    className={cn(
+                      "flex h-16 overflow-hidden rounded-md border bg-background",
+                      option.value === "dark" && "dark bg-background",
+                    )}
+                  >
                     <div className="w-1/4 border-r bg-sidebar" />
                     <div className="flex flex-1 flex-col gap-2 p-2">
                       <div className="h-2 w-1/2 rounded-full bg-foreground/70" />
@@ -56,7 +94,9 @@ export default function AppearanceSettings({ theme, onThemeChange }: Readonly<Pr
                     <Icon data-icon="inline-start" />
                     <span className="flex flex-col gap-0.5">
                       <span className="font-medium">{option.label}</span>
-                      <span className="text-xs font-normal text-muted-foreground">{option.description}</span>
+                      <span className="text-xs font-normal text-muted-foreground">
+                        {option.description}
+                      </span>
                     </span>
                   </span>
                 </ToggleGroupItem>

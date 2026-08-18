@@ -1,4 +1,5 @@
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+mod commands;
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
@@ -16,8 +17,27 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![greet, system_status])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            system_status,
+            commands::automation::get_automation_state,
+            commands::automation::save_automation_rules,
+            commands::automation::scan_downloads,
+            commands::automation::preview_downloads,
+            commands::automation::undo_automated_move,
+            commands::files::hello_from_rust,
+            commands::files::list_disk_roots,
+            commands::files::list_system_locations,
+            commands::files::open_recycle_bin,
+            commands::files::open_file,
+            commands::files::open_with,
+            commands::files::move_entry,
+            commands::files::extract_zip,
+            commands::files::list_directory,
+            commands::files::create_file,
+            commands::files::create_directory,
+            commands::files::delete_entry
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
-
