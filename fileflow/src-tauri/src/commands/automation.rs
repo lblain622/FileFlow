@@ -28,6 +28,7 @@ pub struct MoveHistoryEntry {
     pub source: String,
     pub destination: String,
     pub moved_at_ms: u128,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub undone_at_ms: Option<u128>,
 }
 
