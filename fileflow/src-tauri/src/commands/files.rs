@@ -16,6 +16,7 @@ pub struct DirectoryEntry {
     path: String,
     is_directory: bool,
     size_bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     modified_at_ms: Option<u128>,
 }
 
