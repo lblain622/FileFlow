@@ -139,6 +139,17 @@ const toFileRecord = (
     : "Unknown",
   owner: "You",
 });
+const isWithinDirectory = (path: string, directory: string) => {
+  const normalizedPath = path.replace(/\\/g, "/").toLowerCase();
+  const normalizedDirectory = directory
+    .replace(/\\/g, "/")
+    .toLowerCase()
+    .replace(/\/+$/, "");
+  return (
+    normalizedPath === normalizedDirectory ||
+    normalizedPath.startsWith(`${normalizedDirectory}/`)
+  );
+};
 const FAVORITES_KEY = "fileflow.favorites.v1";
 const getStoredFavorites = (): FileRecord[] => {
   try {
@@ -156,6 +167,7 @@ export default function App() {
   const [quickView, setQuickView] = useState<QuickView>("home");
   const [disks, setDisks] = useState<DiskRoot[]>([]);
   const [locations, setLocations] = useState<SystemLocation[]>([]);
+  const [homePath, setHomePath] = useState<string>();
   const [rootPath, setRootPath] = useState<string>();
   const [directoryPath, setDirectoryPath] = useState<string>();
   const [selected, setSelected] = useState<FileRecord>();
@@ -175,6 +187,7 @@ export default function App() {
   const openInitialExplorerView = async (
     detectedLocations: SystemLocation[],
     detectedDisks: DiskRoot[],
+    allowedPath: string | undefined,
     isActive: () => boolean,
   ) => {
     const preferredLocationKinds: SystemLocation["kind"][] = [
@@ -191,15 +204,24 @@ export default function App() {
         preferredLocationKinds.indexOf(a.kind) -
         preferredLocationKinds.indexOf(b.kind),
     );
+    const locationCandidates = allowedPath
+      ? orderedLocations.filter((location) =>
+          isWithinDirectory(location.path, allowedPath),
+        )
+      : orderedLocations;
     const fallbackDisk =
       detectedDisks.find((disk) => disk.isCurrent) ?? detectedDisks[0];
     const candidates = [
-      ...orderedLocations.map((location) => ({
+      ...locationCandidates.map((location) => ({
         root: location.rootPath,
         path: location.path,
       })),
-      ...(fallbackDisk ? [{ root: fallbackDisk.path, path: fallbackDisk.path }] : []),
-      ...detectedDisks.map((disk) => ({ root: disk.path, path: disk.path })),
+      ...(allowedPath || !fallbackDisk
+        ? []
+        : [{ root: fallbackDisk.path, path: fallbackDisk.path }]),
+      ...(allowedPath
+        ? []
+        : detectedDisks.map((disk) => ({ root: disk.path, path: disk.path }))),
     ].filter(
       (candidate, index, all) =>
         all.findIndex(
@@ -263,12 +285,17 @@ export default function App() {
     ])
       .then(async ([greeting, status, detectedDisks, detectedLocations]) => {
         if (!active) return;
+        const detectedHomePath = detectedLocations.find(
+          (location) => location.kind === "home",
+        )?.path;
         setBackendStatus(`${greeting} · ${status}`);
         setDisks(detectedDisks);
         setLocations(detectedLocations);
+        setHomePath(detectedHomePath);
         await openInitialExplorerView(
           detectedLocations,
           detectedDisks,
+          detectedHomePath,
           () => active,
         );
       })
@@ -304,7 +331,14 @@ export default function App() {
       multiple: false,
       title: "Choose a folder for FileFlow",
     });
-    if (typeof path === "string") await loadFolder(path, path);
+    if (typeof path !== "string") return;
+    if (homePath && !isWithinDirectory(path, homePath)) {
+      setOperationError(
+        `Choose a folder inside your home directory: ${homePath}`,
+      );
+      return;
+    }
+    await loadFolder(path, path);
   };
   const rootForPath = (path: string) => {
     const currentRootMatches =
@@ -429,7 +463,7 @@ export default function App() {
   return (
     <div className="flex h-screen min-h-[640px] overflow-hidden bg-muted/30">
       <Sidebar
-        disks={disks}
+        disks={homePath ? [] : disks}
         locations={locations}
         activePath={directoryPath}
         activeRoot={rootPath}
